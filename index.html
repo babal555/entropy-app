@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>엔트로피 자발성 시뮬레이터 | 사이음</title>
+
+  <!-- Tailwind CSS (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel (브라우저에서 JSX 실행) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* Pretendard 폰트 */
+    @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css");
+
+    /* =========================================
+       1. 폰트 및 기본 설정
+       ========================================= */
+    :root {
+      --primary-color: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg-color: #f8fafc;
+      --text-main: #334155;
+      --text-sub: #64748b;
+      --border-color: #e2e8f0;
+      --panel-bg: rgba(255, 255, 255, 0.95);
+    }
+
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden;
+    }
+
+    /* =========================================
+       2. UI 컴포넌트
+       ========================================= */
+    .ui-panel {
+      background: var(--panel-bg);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-color);
+      border-radius: 1.25rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      transition: all 0.3s ease;
+    }
+
+    .btn-press {
+      transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s;
+      cursor: pointer;
+      user-select: none;
+    }
+    .btn-press:active { transform: scale(0.96); }
+
+    .label-xs {
+      font-size: 0.65rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-sub);
+    }
+
+    /* =========================================
+       3. 유틸리티
+       ========================================= */
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* =========================================
+       4. 애니메이션
+       ========================================= */
+    .fade-in {
+      animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes float-gas {
+      0%   { transform: translate(0, 0); }
+      25%  { transform: translate(15px, -20px); }
+      50%  { transform: translate(-10px, 15px); }
+      75%  { transform: translate(-20px, -10px); }
+      100% { transform: translate(0, 0); }
+    }
+    @keyframes wave {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-3px); }
+    }
+    @keyframes float-ion {
+      0%   { transform: translate(0, 0); }
+      100% { transform: translate(6px, -6px); }
+    }
+    @keyframes pulse-sys {
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50%       { transform: scale(1.05); opacity: 1; }
+    }
+
+    /* =========================================
+       5. 푸터
+       ========================================= */
+    .footer-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      padding: 0.45rem 1rem;
+      background: var(--panel-bg);
+      border-top: 1px solid var(--border-color);
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--text-sub);
+      flex-shrink: 0;
+      letter-spacing: -0.01em;
+    }
+    .footer-link {
+      display: inline-flex;
+      align-items: center;
+      opacity: 0.45;
+      transition: opacity 0.2s;
+      text-decoration: none;
+    }
+    .footer-link:hover { opacity: 1; }
+    .notion-icon { width: 14px; height: 14px; display: block; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    /* ══════════════════════════════════════════
+       열역학 데이터베이스
+    ══════════════════════════════════════════ */
+    const REACTIONS = [
+      {
+        id: "r1", name: "과산화수소의 분해",
+        equation: "2H₂O₂(l) ➔ 2H₂O(l) + O₂(g)",
+        dH: -196000, dS: 125,
+        sysAnim: { reactBox:{l:1,g:0,s:0,aq:0}, prodBox:{l:1,g:1,s:0,aq:0}, text:"기체 입자수 0몰 ➔ 1몰 (증가)", rule:true },
+        surrAnim: { isExo: true },
+        descSystem: "액체가 기체로 분해되며 계의 분자 자유도가 크게 증가합니다.",
+        descSurroundings: "강한 발열 반응으로 주위로 열을 방출하여 주위의 무질서도가 증가합니다.",
+        conflict: false,
+      },
+      {
+        id: "r2", name: "물(얼음)의 융해",
+        equation: "H₂O(s) ➔ H₂O(l)",
+        dH: 6010, dS: 22.0,
+        sysAnim: { reactBox:{l:0,g:0,s:1,aq:0}, prodBox:{l:1,g:0,s:0,aq:0}, text:"고체 ➔ 액체 상태 변화", rule:true },
+        surrAnim: { isExo: false },
+        descSystem: "고체가 액체로 변하면서 분자의 배열이 흐트러져 계의 엔트로피가 증가합니다.",
+        descSurroundings: "흡열 반응으로 주위의 열을 흡수하므로 주위의 엔트로피가 감소합니다.",
+        conflict: true,
+      },
+      {
+        id: "r3", name: "암모니아 합성",
+        equation: "N₂(g) + 3H₂(g) ➔ 2NH₃(g)",
+        dH: -92200, dS: -198.7,
+        sysAnim: { reactBox:{l:0,g:4,s:0,aq:0}, prodBox:{l:0,g:2,s:0,aq:0}, text:"기체 입자수 4몰 ➔ 2몰 (감소)", rule:true },
+        surrAnim: { isExo: true },
+        descSystem: "기체 분자 수가 4몰에서 2몰로 감소하여 계의 무질서도가 감소합니다.",
+        descSurroundings: "발열 반응으로 주위로 열을 방출하므로 주위의 엔트로피가 증가합니다.",
+        conflict: true,
+      },
+      {
+        id: "r4", name: "탄산칼슘의 열분해",
+        equation: "CaCO₃(s) ➔ CaO(s) + CO₂(g)",
+        dH: 178300, dS: 160.5,
+        sysAnim: { reactBox:{l:0,g:0,s:1,aq:0}, prodBox:{l:0,g:1,s:1,aq:0}, text:"기체 입자수 0몰 ➔ 1몰 (증가)", rule:true },
+        surrAnim: { isExo: false },
+        descSystem: "고체에서 기체가 생성되어 계의 무질서도가 크게 증가합니다.",
+        descSurroundings: "강한 흡열 반응으로 주위의 열을 빼앗아 주위의 엔트로피가 크게 감소합니다.",
+        conflict: true,
+      },
+      {
+        id: "r5", name: "오존 생성 반응",
+        equation: "3O₂(g) ➔ 2O₃(g)",
+        dH: 285000, dS: -137,
+        sysAnim: { reactBox:{l:0,g:3,s:0,aq:0}, prodBox:{l:0,g:2,s:0,aq:0}, text:"기체 입자수 3몰 ➔ 2몰 (감소)", rule:true },
+        surrAnim: { isExo: false },
+        descSystem: "기체 분자 수가 3몰에서 2몰로 감소하여 계의 엔트로피가 감소합니다.",
+        descSurroundings: "흡열 반응으로 주위의 열을 빼앗아 주위의 엔트로피도 감소합니다.",
+        conflict: false,
+      },
+      {
+        id: "r6", name: "질산암모늄의 용해",
+        equation: "NH₄NO₃(s) ➔ NH₄⁺(aq) + NO₃⁻(aq)",
+        dH: 25700, dS: 108.7,
+        sysAnim: { reactBox:{l:1,g:0,s:1,aq:0}, prodBox:{l:1,g:0,s:0,aq:2}, text:"이온 입자수 0몰 ➔ 2몰 (증가)", rule:false },
+        surrAnim: { isExo: false },
+        descSystem: "고체 결정이 물에 녹아 이온으로 흩어지며 계의 엔트로피가 대폭 증가합니다.",
+        descSurroundings: "주위의 열을 흡수하여 차가워지므로 주위의 엔트로피는 감소합니다.",
+        conflict: true,
+      },
+    ];
+
+    /* ══════════════════════════════════════════
+       메인 컴포넌트
+    ══════════════════════════════════════════ */
+    function EntropySimulator() {
+      const [phase, setPhase] = useState("predict");
+      const [selectedReaction, setSelectedReaction] = useState(REACTIONS[2]);
+      const [tempC, setTempC] = useState(25);
+      const [activeModal, setActiveModal] = useState(null);
+      const [sysChoice, setSysChoice] = useState(null);
+      const [surrChoice, setSurrChoice] = useState(null);
+      const [feedback, setFeedback] = useState({ type: "", message: "" });
+      const [dragItem, setDragItem] = useState(null);
+      const [hoverZone, setHoverZone] = useState(null);
+
+      const seesawRef = useRef(null);
+      const floatingDragRef = useRef(null);
+      const initialDragPos = useRef({ x: 0, y: 0 });
+      const hoverZoneRef = useRef(null);
+
+      const handleSelectReaction = (rxn) => {
+        setSelectedReaction(rxn);
+        setPhase("predict");
+        setSysChoice(null);
+        setSurrChoice(null);
+        setTempC(25);
+        setFeedback({ type: "", message: "" });
+        setActiveModal(null);
+      };
+
+      const handleDragStart = (type, e) => {
+        if (phase !== "predict") return;
+        e.preventDefault();
+        initialDragPos.current = { x: e.clientX, y: e.clientY };
+        setDragItem(type);
+        if (type === "system") setSysChoice(null);
+        if (type === "surroundings") setSurrChoice(null);
+        setHoverZone(null);
+        hoverZoneRef.current = null;
+      };
+
+      useEffect(() => {
+        if (!dragItem) return;
+        const handlePointerMove = (e) => {
+          if (floatingDragRef.current) {
+            floatingDragRef.current.style.transform =
+              `translate3d(calc(${e.clientX}px - 50%), calc(${e.clientY}px - 50%), 0) scale(1.1) rotate(2deg)`;
+          }
+          if (seesawRef.current) {
+            const rect = seesawRef.current.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top - 80 && e.clientY <= rect.bottom + 80) {
+              const midX = rect.left + rect.width / 2;
+              const newZone = e.clientX < midX ? "decrease" : "increase";
+              if (hoverZoneRef.current !== newZone) {
+                setHoverZone(newZone);
+                hoverZoneRef.current = newZone;
+              }
+            } else if (hoverZoneRef.current !== null) {
+              setHoverZone(null);
+              hoverZoneRef.current = null;
+            }
+          }
+        };
+        const handlePointerUp = () => {
+          if (hoverZoneRef.current) {
+            if (dragItem === "system") setSysChoice(hoverZoneRef.current);
+            if (dragItem === "surroundings") setSurrChoice(hoverZoneRef.current);
+          }
+          setDragItem(null);
+          setHoverZone(null);
+          hoverZoneRef.current = null;
+        };
+        window.addEventListener("pointermove", handlePointerMove);
+        window.addEventListener("pointerup", handlePointerUp);
+        document.body.style.overflow = "hidden";
+        document.body.style.touchAction = "none";
+        return () => {
+          window.removeEventListener("pointermove", handlePointerMove);
+          window.removeEventListener("pointerup", handlePointerUp);
+          document.body.style.overflow = "hidden";
+          document.body.style.touchAction = "auto";
+        };
+      }, [dragItem]);
+
+      const T = tempC + 273.15;
+      const deltaS_system = selectedReaction.dS;
+      const deltaS_surroundings = -selectedReaction.dH / T;
+      const deltaS_total = deltaS_system + deltaS_surroundings;
+      const correctSysDir = deltaS_system > 0 ? "increase" : "decrease";
+      const correctSurrDir = deltaS_surroundings > 0 ? "increase" : "decrease";
+
+      const handleCheckPrediction = () => {
+        if (!sysChoice || !surrChoice) {
+          setFeedback({ type: "error", message: "계와 주위의 엔트로피 블록을 모두 시소보드에 배치해주세요!" });
+          return;
+        }
+        if (sysChoice !== correctSysDir && surrChoice !== correctSurrDir)
+          setFeedback({ type: "error", message: "❌ 두 블록 모두 방향이 틀렸습니다. 힌트를 열어 단서를 확인해보세요!" });
+        else if (sysChoice !== correctSysDir)
+          setFeedback({ type: "error", message: "❌ 계의 엔트로피 예측이 틀렸습니다. 힌트에서 기체 분자 수 변화를 확인하세요." });
+        else if (surrChoice !== correctSurrDir)
+          setFeedback({ type: "error", message: "❌ 주위의 엔트로피 예측이 틀렸습니다. 힌트에서 발열/흡열 여부를 확인하세요." });
+        else {
+          setFeedback({ type: "success", message: "정답입니다! 👏 아래 온도를 조절하며 자발성의 변화를 관찰하세요." });
+          setPhase("simulate");
+        }
+      };
+
+      const MAX_ANGLE = 11;
+      const tiltAngle = phase === "simulate"
+        ? Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, deltaS_total * 0.15)) : 0;
+      const isSpontaneous = deltaS_total > 0;
+
+      const SCALE_FACTOR = 0.6;
+      const PREDICT_SIZE = 62;
+      const systemHeight = phase === "simulate"
+        ? Math.max(45, Math.min(Math.abs(deltaS_system) * SCALE_FACTOR, 120)) : PREDICT_SIZE;
+      const surroundingsHeight = phase === "simulate"
+        ? Math.max(45, Math.min(Math.abs(deltaS_surroundings) * SCALE_FACTOR, 120)) : PREDICT_SIZE;
+
+      const getBlockSide = (type) => {
+        if (phase === "predict") {
+          const choice = type === "system" ? sysChoice : surrChoice;
+          if (choice === "decrease") return "left";
+          if (choice === "increase") return "right";
+          return null;
+        }
+        const val = type === "system" ? deltaS_system : deltaS_surroundings;
+        return val < 0 ? "left" : "right";
+      };
+
+      const sysSide = getBlockSide("system");
+      const surrSide = getBlockSide("surroundings");
+      const ballLeft = phase === "simulate" ? (isSpontaneous ? "94%" : "6%") : "50%";
+      const ballRot  = phase === "simulate" ? (isSpontaneous ? 720 : -720) : 0;
+
+      return (
+        <div className="flex flex-col h-[100dvh] text-slate-800 overflow-hidden"
+             style={{ backgroundColor: "var(--bg-color)", fontFamily: "inherit" }}>
+
+          {/* ── 헤더 ── */}
+          <header className="bg-white border-b px-3 py-2 flex items-center shadow-sm z-30 shrink-0"
+                  style={{ borderColor: "var(--border-color)" }}>
+            <h1 className="text-sm md:text-xl font-black text-slate-900 flex items-center gap-1.5 tracking-tight">
+              <span style={{ color: "var(--primary-color)" }}>⚖️</span> 엔트로피 자발성 시뮬레이터
+            </h1>
+          </header>
+
+          <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+
+            {/* ── 반응 목록 (모바일=가로 칩바) ── */}
+            <aside className="w-full lg:w-64 bg-white border-b lg:border-b-0 lg:border-r
+                             overflow-x-auto lg:overflow-y-auto
+                             px-2 py-1.5 lg:p-3
+                             flex lg:flex-col gap-1.5 lg:gap-2
+                             items-center lg:items-start
+                             shrink-0 z-20 shadow-sm scrollbar-hide"
+                   style={{ borderColor: "var(--border-color)" }}>
+              <h2 className="hidden lg:block label-xs mb-1 ml-1">반응 목록</h2>
+              {REACTIONS.map((rxn) => (
+                <button
+                  key={rxn.id}
+                  onClick={() => handleSelectReaction(rxn)}
+                  className={`text-left shrink-0 rounded-xl border-2 transition-colors duration-200 btn-press
+                             px-2.5 py-1 lg:p-3 whitespace-nowrap lg:whitespace-normal lg:w-full
+                             ${selectedReaction.id === rxn.id
+                               ? "border-indigo-500 bg-indigo-50/70 shadow-sm"
+                               : "border-slate-100 bg-white hover:border-indigo-200 hover:bg-slate-50"}`}
+                >
+                  <div className="font-bold text-[10px] lg:text-sm" style={{ color: "var(--text-main)" }}>
+                    {rxn.name}
+                  </div>
+                  <div className="hidden lg:block text-[9px] font-mono text-slate-500 bg-white px-1 py-0.5 rounded border border-slate-100 inline-block mt-0.5">
+                    {rxn.equation}
+                  </div>
+                </button>
+              ))}
+            </aside>
+
+            {/* ── 메인 영역 ── */}
+            <main className="flex-1 flex flex-col overflow-hidden p-1.5 md:p-3 gap-1.5 md:gap-2"
+                  style={{ backgroundColor: "var(--bg-color)" }}>
+
+              {/* 반응 정보 */}
+              <div className="ui-panel px-2.5 py-2 md:p-4 shrink-0">
+                <div className="flex flex-wrap items-center gap-1 md:gap-2">
+                  <h2 className="text-sm md:text-xl font-black tracking-tight" style={{ color: "var(--text-main)" }}>
+                    {selectedReaction.name}
+                  </h2>
+                  <div className="text-[10px] md:text-sm font-mono text-indigo-700 bg-indigo-50/50 px-2 py-1 rounded-lg
+                                  inline-flex flex-wrap items-center border border-indigo-100 gap-1.5 font-bold">
+                    <span>{selectedReaction.equation}</span>
+                    <span className="text-slate-600 bg-white px-1.5 py-0.5 rounded shadow-sm border border-slate-200">
+                      ΔH = {(selectedReaction.dH / 1000).toFixed(1)} kJ/mol
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 예측 패널 */}
+              {phase === "predict" && (
+                <div className="ui-panel px-2.5 py-2 md:p-4 shrink-0">
+                  <p className="text-[9px] md:text-sm font-bold mb-1.5 text-center" style={{ color: "var(--text-sub)" }}>
+                    👆 시소의 왼쪽(감소) · 오른쪽(증가)으로 블록을 드래그하세요
+                  </p>
+                  <div className="flex gap-2">
+                    {/* 계 */}
+                    <div className="flex-1 rounded-xl border border-amber-100 bg-amber-50 px-2 py-1.5 flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] md:text-xs font-black text-amber-900">📦 계 엔트로피</span>
+                        <button onClick={() => setActiveModal("system")}
+                          className="text-[8px] md:text-[9px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-full transition-colors btn-press">
+                          💡 힌트
+                        </button>
+                      </div>
+                      <div className="h-[52px] md:h-[64px] flex items-center justify-center touch-none">
+                        {!sysChoice && dragItem !== "system" ? (
+                          <div className="cursor-grab active:cursor-grabbing hover:-translate-y-0.5 transition-transform"
+                               onPointerDown={(e) => handleDragStart("system", e)}>
+                            <PredictDraggableBox type="system" />
+                          </div>
+                        ) : (
+                          <div className="w-[48px] h-[48px] md:w-[58px] md:h-[58px] rounded-lg border-2 border-dashed border-slate-300 bg-slate-100/50 flex items-center justify-center text-slate-400 text-[7px] font-bold">
+                            {dragItem === "system" ? "드래그 중" : "✓ 배치"}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {/* 주위 */}
+                    <div className="flex-1 rounded-xl border border-cyan-100 bg-cyan-50 px-2 py-1.5 flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] md:text-xs font-black text-cyan-900">💨 주위 엔트로피</span>
+                        <button onClick={() => setActiveModal("surroundings")}
+                          className="text-[8px] md:text-[9px] font-bold text-cyan-700 bg-cyan-100 hover:bg-cyan-200 px-2 py-0.5 rounded-full transition-colors btn-press">
+                          💡 힌트
+                        </button>
+                      </div>
+                      <div className="h-[52px] md:h-[64px] flex items-center justify-center touch-none">
+                        {!surrChoice && dragItem !== "surroundings" ? (
+                          <div className="cursor-grab active:cursor-grabbing hover:-translate-y-0.5 transition-transform"
+                               onPointerDown={(e) => handleDragStart("surroundings", e)}>
+                            <PredictDraggableBox type="surroundings" />
+                          </div>
+                        ) : (
+                          <div className="w-[48px] h-[48px] md:w-[58px] md:h-[58px] rounded-lg border-2 border-dashed border-slate-300 bg-slate-100/50 flex items-center justify-center text-slate-400 text-[7px] font-bold">
+                            {dragItem === "surroundings" ? "드래그 중" : "✓ 배치"}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-col items-center gap-1.5">
+                    {feedback.message && (
+                      <div className={`px-3 py-1.5 rounded-lg text-[9px] md:text-xs font-bold text-center shadow-sm w-full
+                        ${feedback.type === "error"
+                          ? "bg-rose-100 text-rose-700 border border-rose-200"
+                          : "bg-emerald-100 text-emerald-700 border border-emerald-200"}`}>
+                        {feedback.message}
+                      </div>
+                    )}
+                    <button onClick={handleCheckPrediction}
+                      className="px-4 py-2 text-white font-black rounded-xl shadow-md text-[10px] md:text-sm btn-press"
+                      style={{ backgroundColor: "var(--primary-color)" }}
+                      onMouseOver={e => e.currentTarget.style.backgroundColor = "var(--primary-hover)"}
+                      onMouseOut={e => e.currentTarget.style.backgroundColor = "var(--primary-color)"}>
+                      정답 확인 및 시소 가동 🚀
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── 시소 보드 (flex-1) ── */}
+              <div ref={seesawRef}
+                   className="w-full flex-1 min-h-[120px] rounded-xl border-[3px] border-white
+                              shadow-[inset_0_5px_15px_rgba(0,0,0,0.03)]
+                              relative flex flex-col items-center justify-end pb-3 md:pb-6
+                              overflow-hidden select-none"
+                   style={{ backgroundColor: "rgba(226,232,240,0.35)" }}>
+
+                {dragItem && (
+                  <>
+                    <div className={`absolute left-0 top-0 w-1/2 h-full transition-colors duration-200 ${hoverZone === "decrease" ? "bg-rose-100/40 border-r-2 border-rose-300 border-dashed" : "bg-transparent"}`} />
+                    <div className={`absolute right-0 top-0 w-1/2 h-full transition-colors duration-200 ${hoverZone === "increase" ? "bg-emerald-100/40 border-l-2 border-emerald-300 border-dashed" : "bg-transparent"}`} />
+                  </>
+                )}
+
+                {/* 좌우 라벨 */}
+                <div className="absolute top-1.5 w-full flex justify-between px-2 md:px-8 text-center pointer-events-none opacity-60 z-0">
+                  <div className={`w-[44%] transition-all duration-300 ${hoverZone === "decrease" ? "opacity-100 scale-105" : ""}`}>
+                    <div className="text-[10px] md:text-xl font-black text-rose-600">엔트로피 감소 (-)</div>
+                    <div className="text-[8px] md:text-sm font-bold text-rose-800">비자발적 방향</div>
+                  </div>
+                  <div className={`w-[44%] transition-all duration-300 ${hoverZone === "increase" ? "opacity-100 scale-105" : ""}`}>
+                    <div className="text-[10px] md:text-xl font-black text-emerald-600">엔트로피 증가 (+)</div>
+                    <div className="text-[8px] md:text-sm font-bold text-emerald-800">자발적 방향</div>
+                  </div>
+                </div>
+
+                {/* 결과 배지 */}
+                {phase === "simulate" && (
+                  <div className={`absolute top-2 left-1/2 -translate-x-1/2 px-3 md:px-6 py-1.5 rounded-xl border-2 shadow-md z-20 bg-white/95 backdrop-blur whitespace-nowrap
+                    ${isSpontaneous ? "border-emerald-400 text-emerald-700" : "border-rose-400 text-rose-700"}`}>
+                    <div className="text-[8px] md:text-[10px] font-black opacity-60 tracking-wider text-center">
+                      ΔS_tot = {deltaS_total.toFixed(1)} J/K
+                    </div>
+                    <div className="text-[10px] md:text-sm font-black text-center">
+                      {isSpontaneous ? "✅ 자발적 진행" : "❌ 비자발적 (불가능)"}
+                    </div>
+                  </div>
+                )}
+
+                {/* 시소 빔 */}
+                <div className="w-full max-w-[500px] relative h-[85px] md:h-[130px] flex flex-col justify-end px-2 md:px-6 items-center">
+                  <div className="absolute bottom-[15px] md:bottom-[25px] w-full origin-center z-10"
+                       style={{ transform: `rotate(${tiltAngle}deg)`, transition: "transform 0.7s cubic-bezier(0.34,1.56,0.64,1)" }}>
+
+                    <div className="absolute bottom-0 w-full h-3 md:h-4 rounded-full shadow-md border-b-2 border-slate-400 z-10"
+                         style={{ background: "linear-gradient(to right, #94a3b8, #cbd5e1, #94a3b8)" }} />
+
+                    {/* 자발성의 공 */}
+                    <div className="absolute z-30 rounded-full flex items-center justify-center font-black text-center leading-[1.1] tracking-tighter"
+                         style={{
+                           width: "28px", height: "28px", fontSize: "6.5px",
+                           bottom: "100%", left: ballLeft,
+                           transform: `translate(-50%, -2px) rotate(${ballRot}deg)`,
+                           background: "radial-gradient(circle at 30% 30%, #fff, #facc15 40%, #ca8a04 100%)",
+                           border: "1px solid #ca8a04",
+                           color: "#422006",
+                           boxShadow: "0 3px 8px rgba(0,0,0,0.5)",
+                           transition: phase === "simulate"
+                             ? "left 0.7s cubic-bezier(0.5,0,1,0.8) 0.5s, transform 0.7s cubic-bezier(0.5,0,1,0.8) 0.5s"
+                             : "left 0.5s ease",
+                         }}>
+                      반응<br />자발
+                    </div>
+
+                    {/* 드롭존 가이드 */}
+                    {phase === "predict" && (
+                      <>
+                        <div className={`absolute bottom-full left-[8%] md:left-[10%] w-12 h-9 md:w-20 md:h-14 mb-0.5 border-2 md:border-[3px] border-dashed rounded-lg flex items-center justify-center text-[9px] md:text-xs font-black backdrop-blur-sm transition-all
+                          ${hoverZone === "decrease" ? "border-rose-400 bg-rose-100/60 text-rose-700 scale-105" : "border-rose-300/40 bg-rose-50/40 text-rose-600/60"}`}>
+                          놓기<br />(감소)
+                        </div>
+                        <div className={`absolute bottom-full right-[8%] md:right-[10%] w-12 h-9 md:w-20 md:h-14 mb-0.5 border-2 md:border-[3px] border-dashed rounded-lg flex items-center justify-center text-[9px] md:text-xs font-black backdrop-blur-sm transition-all
+                          ${hoverZone === "increase" ? "border-emerald-400 bg-emerald-100/60 text-emerald-700 scale-105" : "border-emerald-300/40 bg-emerald-50/40 text-emerald-600/60"}`}>
+                          놓기<br />(증가)
+                        </div>
+                      </>
+                    )}
+
+                    {/* 좌측 블록 */}
+                    <div className="absolute bottom-full left-[8%] md:left-[10%] flex gap-1 items-end z-20 mb-[1px]">
+                      {sysSide === "left" && (
+                        <div onPointerDown={phase === "predict" ? (e) => handleDragStart("system", e) : undefined}
+                             className={phase === "predict" ? "cursor-grab active:cursor-grabbing hover:-translate-y-1 transition-transform touch-none" : ""}>
+                          <EntropyBox type="system" rawValue={deltaS_system} height={systemHeight} phase={phase} predictedDir={sysChoice} />
+                        </div>
+                      )}
+                      {surrSide === "left" && (
+                        <div onPointerDown={phase === "predict" ? (e) => handleDragStart("surroundings", e) : undefined}
+                             className={phase === "predict" ? "cursor-grab active:cursor-grabbing hover:-translate-y-1 transition-transform touch-none" : ""}>
+                          <EntropyBox type="surroundings" rawValue={deltaS_surroundings} height={surroundingsHeight} phase={phase} predictedDir={surrChoice} />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 우측 블록 */}
+                    <div className="absolute bottom-full right-[8%] md:right-[10%] flex gap-1 items-end flex-row-reverse z-20 mb-[1px]">
+                      {sysSide === "right" && (
+                        <div onPointerDown={phase === "predict" ? (e) => handleDragStart("system", e) : undefined}
+                             className={phase === "predict" ? "cursor-grab active:cursor-grabbing hover:-translate-y-1 transition-transform touch-none" : ""}>
+                          <EntropyBox type="system" rawValue={deltaS_system} height={systemHeight} phase={phase} predictedDir={sysChoice} />
+                        </div>
+                      )}
+                      {surrSide === "right" && (
+                        <div onPointerDown={phase === "predict" ? (e) => handleDragStart("surroundings", e) : undefined}
+                             className={phase === "predict" ? "cursor-grab active:cursor-grabbing hover:-translate-y-1 transition-transform touch-none" : ""}>
+                          <EntropyBox type="surroundings" rawValue={deltaS_surroundings} height={surroundingsHeight} phase={phase} predictedDir={surrChoice} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 피벗 */}
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-0">
+                    <svg width="46" height="30" viewBox="0 0 100 80" className="drop-shadow-md origin-bottom md:w-[80px] md:h-[50px]">
+                      <polygon points="50,40 90,80 10,80" fill="url(#pg)" stroke="#475569" strokeWidth="2" />
+                      <circle cx="50" cy="40" r="5" fill="#f8fafc" stroke="#334155" strokeWidth="2" />
+                      <defs>
+                        <linearGradient id="pg" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="#94a3b8" />
+                          <stop offset="100%" stopColor="#64748b" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* 온도 슬라이더 */}
+              <div className="ui-panel px-3 py-2 md:p-4 shrink-0">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-bold text-[10px] md:text-sm flex items-center gap-1" style={{ color: "var(--text-main)" }}>
+                    🌡️ 실험실 온도
+                    <span className="hidden sm:inline text-[8px] font-bold border px-1 rounded"
+                          style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)", backgroundColor: "#eef2ff" }}>
+                      초기: 25°C
+                    </span>
+                  </span>
+                  <div className="text-right leading-none">
+                    <span className="text-sm md:text-lg font-black mr-1" style={{ color: "var(--primary-color)" }}>{tempC}°C</span>
+                    <span className="text-[8px] md:text-[10px] font-bold" style={{ color: "var(--text-sub)" }}>({T.toFixed(1)} K)</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sky-500 text-sm">❄️</span>
+                  <input type="range" min="-200" max="1200" step="10"
+                    value={tempC} disabled={phase === "predict"}
+                    onChange={(e) => setTempC(Number(e.target.value))}
+                    className={`w-full h-2 rounded-full appearance-none outline-none
+                      ${phase === "predict" ? "bg-slate-200 cursor-not-allowed" : "cursor-pointer shadow-inner"}`}
+                    style={phase !== "predict" ? { background: "linear-gradient(to right,#38bdf8,#818cf8,#f87171)" } : {}}
+                  />
+                  <span className="text-rose-500 text-sm">🔥</span>
+                </div>
+              </div>
+
+              {/* 해설 패널 (simulate) */}
+              {phase === "simulate" && (
+                <div className="ui-panel px-2.5 py-2 md:p-4 shrink-0 fade-in">
+                  <h3 className="text-[9px] md:text-sm font-black mb-1.5 flex items-center gap-1 border-b pb-1.5"
+                      style={{ color: "var(--text-main)", borderColor: "var(--border-color)" }}>
+                    <span className="bg-indigo-100 text-indigo-600 px-1 py-0.5 rounded text-[9px] md:text-xs">📝</span>
+                    자발성 판단 논리 해설
+                    <span className="ml-auto text-[7px] md:hidden font-medium" style={{ color: "var(--text-sub)" }}>← 스와이프</span>
+                  </h3>
+                  <div className="flex md:grid md:grid-cols-3 gap-2 overflow-x-auto md:overflow-visible pb-1 md:pb-0 snap-x snap-mandatory -mx-1 px-1 scrollbar-hide">
+
+                    <div className={`flex-shrink-0 w-[72vw] sm:w-56 md:w-auto snap-start p-2 rounded-xl border
+                      ${deltaS_system > 0 ? "border-emerald-200 bg-emerald-50/50" : "border-rose-200 bg-rose-50/50"}`}>
+                      <div className="label-xs mb-0.5">STEP 1. 계</div>
+                      <div className={`text-xs md:text-base font-black mb-1 flex items-center gap-1 ${deltaS_system > 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                        {deltaS_system > 0 ? "📈 증가" : "📉 감소"}
+                        <span className="text-[8px] font-bold px-1 py-0.5 bg-white rounded border border-slate-200 text-slate-700">
+                          {deltaS_system > 0 ? "+" : ""}{deltaS_system.toFixed(1)} J/K
+                        </span>
+                      </div>
+                      <p className="text-[8px] md:text-xs leading-tight" style={{ color: "var(--text-sub)" }}>
+                        {selectedReaction.descSystem}
+                      </p>
+                    </div>
+
+                    <div className={`flex-shrink-0 w-[72vw] sm:w-56 md:w-auto snap-start p-2 rounded-xl border
+                      ${deltaS_surroundings > 0 ? "border-emerald-200 bg-emerald-50/50" : "border-rose-200 bg-rose-50/50"}`}>
+                      <div className="label-xs mb-0.5">STEP 2. 주위</div>
+                      <div className={`text-xs md:text-base font-black mb-1 flex items-center gap-1 ${deltaS_surroundings > 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                        {deltaS_surroundings > 0 ? "📈 증가" : "📉 감소"}
+                        <span className="text-[8px] font-bold px-1 py-0.5 bg-white rounded border border-slate-200 text-slate-700">
+                          {deltaS_surroundings > 0 ? "+" : ""}{deltaS_surroundings.toFixed(1)} J/K
+                        </span>
+                      </div>
+                      <p className="text-[8px] md:text-xs leading-tight" style={{ color: "var(--text-sub)" }}>
+                        {selectedReaction.descSurroundings}
+                      </p>
+                    </div>
+
+                    <div className={`flex-shrink-0 w-[72vw] sm:w-56 md:w-auto snap-start p-2 rounded-xl border shadow-inner flex flex-col justify-center
+                      ${isSpontaneous ? "border-indigo-200 bg-indigo-50/80" : "border-slate-200 bg-slate-100"}`}>
+                      <div className="label-xs mb-0.5">STEP 3. 최종 결론</div>
+                      <div className={`text-sm md:text-lg font-black mb-1 ${isSpontaneous ? "text-indigo-600" : "text-slate-600"}`}>
+                        {deltaS_total > 0 ? "+" : ""}{deltaS_total.toFixed(1)}
+                        <span className="text-[8px] ml-0.5">J/K</span>
+                      </div>
+                      <p className="text-[8px] md:text-xs leading-tight" style={{ color: "var(--text-main)" }}>
+                        전체 엔트로피가 <strong className={isSpontaneous ? "text-indigo-600" : "text-rose-600"}>
+                          {isSpontaneous ? "0보다 커 자발적" : "0보다 작아 비자발적"}
+                        </strong>입니다.
+                      </p>
+                      {selectedReaction.conflict && (
+                        <div className="mt-1 text-[7px] md:text-[9px] font-bold text-indigo-800 bg-white p-1 rounded-lg border border-indigo-100 shadow-sm leading-snug">
+                          💡 {tempC}℃에서 계의 <span className="bg-amber-100 px-0.5 rounded">{deltaS_system > 0 ? "증가" : "감소"}</span>보다
+                          주위의 <span className="bg-cyan-100 px-0.5 rounded">{deltaS_surroundings > 0 ? "증가" : "감소"}</span> 효과가 커{" "}
+                          <span className="underline decoration-indigo-400 decoration-2">{isSpontaneous ? "자발적" : "비자발적"}</span>
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              )}
+            </main>
+          </div>
+
+          {/* ── 푸터 ── */}
+          <footer className="footer-container">
+            <span>© 2026 사이음(sci_eum). 과학의 사이, 사람을 잇다.</span>
+            <a href="https://fern-crater-01e.notion.site/2d67ccb904db81c5b78ae61f5a7d6e50?pvs=105"
+               target="_blank" className="footer-link" title="오류 문의">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Notion-logo.svg"
+                   alt="Notion" className="notion-icon" />
+            </a>
+          </footer>
+
+          {/* 드래그 고스트 */}
+          {dragItem && (
+            <div ref={floatingDragRef}
+                 className="fixed top-0 left-0 z-50 pointer-events-none opacity-90 will-change-transform"
+                 style={{ transform: `translate3d(calc(${initialDragPos.current.x}px - 50%), calc(${initialDragPos.current.y}px - 50%), 0) scale(1.1) rotate(2deg)` }}>
+              <PredictDraggableBox type={dragItem} />
+            </div>
+          )}
+
+          {activeModal === "system" && <SystemHintModal rxn={selectedReaction} onClose={() => setActiveModal(null)} />}
+          {activeModal === "surroundings" && <SurrHintModal rxn={selectedReaction} onClose={() => setActiveModal(null)} />}
+        </div>
+      );
+    }
+
+    /* ── 서브컴포넌트 ── */
+
+    function PredictDraggableBox({ type }) {
+      const isSystem = type === "system";
+      const c = isSystem
+        ? { bg:"bg-amber-100", border:"border-amber-400", badge:"bg-amber-200", dark:"text-amber-950" }
+        : { bg:"bg-cyan-100",  border:"border-cyan-400",  badge:"bg-cyan-200",  dark:"text-cyan-950" };
+      return (
+        <div className={`w-[48px] h-[48px] md:w-[58px] md:h-[58px] flex flex-col justify-between items-center overflow-hidden shadow-xl border-t-2 border-x-2 rounded-t-xl ${c.bg} ${c.border}`}>
+          <div className={`w-full py-0.5 text-center border-b border-black/5 ${c.badge}`}>
+            <span className={`text-[7px] md:text-[8px] font-black tracking-tighter ${c.dark}`}>
+              {isSystem ? "📦 계" : "💨 주위"}
+            </span>
+          </div>
+          <div className="flex-1 flex items-center justify-center w-full relative">
+            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "repeating-linear-gradient(45deg,#000 0,#000 2px,transparent 2px,transparent 10px)" }} />
+            <div className="relative z-10 text-base drop-shadow animate-bounce">👆</div>
+          </div>
+        </div>
+      );
+    }
+
+    function EntropyBox({ type, rawValue, height, phase, predictedDir }) {
+      const isSystem = type === "system";
+      const isPositive = phase === "predict" ? predictedDir === "increase" : rawValue > 0;
+      const absValue = Math.abs(rawValue);
+      const displayHeight = Math.max(44, Math.min(120, height));
+      const c = isSystem
+        ? { bg:"bg-amber-100", border:"border-amber-400", text:"text-amber-900", badge:"bg-amber-200", dark:"text-amber-950" }
+        : { bg:"bg-cyan-100",  border:"border-cyan-400",  text:"text-cyan-900",  badge:"bg-cyan-200",  dark:"text-cyan-950" };
+      return (
+        <div className={`relative w-[40px] sm:w-[50px] md:w-[62px] flex flex-col justify-between items-center overflow-hidden shadow-md ${c.bg} ${c.border} border-t-2 border-x-2 rounded-t-xl`}
+             style={{ height: `${displayHeight}px`, transition: "height 0.7s cubic-bezier(0.34,1.56,0.64,1)" }}>
+          <div className={`w-full py-0.5 text-center border-b border-black/5 ${c.badge}`}>
+            <span className={`text-[6px] md:text-[7px] font-black tracking-tighter ${c.dark}`}>
+              {isSystem ? "📦 계" : "💨 주위"}
+            </span>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center p-0.5 text-center w-full relative">
+            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "repeating-linear-gradient(45deg,#000 0,#000 2px,transparent 2px,transparent 10px)" }} />
+            {phase === "predict" ? (
+              <div className={`relative z-10 text-[9px] sm:text-[10px] md:text-sm font-black ${isPositive ? "text-emerald-700" : "text-rose-700"}`}>
+                {isPositive ? "증가" : "감소"}
+              </div>
+            ) : (
+              <>
+                <div className={`relative z-10 text-[8px] sm:text-[10px] font-black leading-none mb-0.5 ${isPositive ? "text-emerald-700" : "text-rose-700"}`}>
+                  {isPositive ? "증가" : "감소"}
+                </div>
+                <div className={`relative z-10 text-[5px] md:text-[7px] font-black mb-0.5 ${c.text}`}>
+                  {isPositive ? "ΔS>0" : "ΔS<0"}
+                </div>
+                <div className={`relative z-10 text-[6px] md:text-[8px] font-mono font-bold bg-white/80 px-0.5 rounded shadow-sm ${c.dark}`}>
+                  {isPositive ? "+" : "-"}{absValue.toFixed(0)}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    /* ── 힌트 모달: 계 ── */
+    function SystemHintModal({ rxn, onClose }) {
+      const [stage, setStage] = useState(0);
+      useEffect(() => {
+        const t1 = setTimeout(() => setStage(1), 1000);
+        const t2 = setTimeout(() => setStage(2), 3000);
+        return () => { clearTimeout(t1); clearTimeout(t2); };
+      }, []);
+      return (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden"
+               style={{ animation: "fadeIn 0.2s ease forwards" }}>
+            <div className="bg-amber-100 px-4 py-3 flex justify-between items-center border-b border-amber-200">
+              <h3 className="font-black text-amber-900 text-sm md:text-base">📦 계의 미시적 상태 변화</h3>
+              <button onClick={onClose} className="text-amber-700 hover:text-amber-900 font-bold text-xl leading-none btn-press">&times;</button>
+            </div>
+            <div className="p-4 flex flex-col items-center">
+              <div className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 mb-3 text-center">
+                <span className="font-mono font-bold text-indigo-700 text-sm">{rxn.equation}</span>
+              </div>
+              <div className="w-full h-36 bg-white rounded-xl border-2 border-slate-300 relative overflow-hidden mb-3 shadow-inner">
+                <ReactionContainer box={rxn.sysAnim.reactBox} isActive={stage < 2} />
+                <ReactionContainer box={rxn.sysAnim.prodBox} isActive={stage >= 1} isFadingIn={stage === 1} />
+                {stage === 1 && (
+                  <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/20 backdrop-blur-[1px]">
+                    <div className="bg-amber-500 text-white font-black px-4 py-2 rounded-full shadow-lg animate-pulse text-sm">반응 진행 중... ➔</div>
+                  </div>
+                )}
+              </div>
+              <div className="h-14 flex flex-col items-center justify-center w-full">
+                {stage === 2 && (
+                  <>
+                    <div className="text-amber-800 font-black text-sm bg-amber-50 px-4 py-1.5 rounded-lg border border-amber-200 mb-1.5" style={{ animation: "fadeIn 0.3s ease" }}>
+                      {rxn.sysAnim.text}
+                    </div>
+                    {rxn.sysAnim.rule && (
+                      <div className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-md">
+                        💡 무질서도: 고체(s) &lt; 액체(l) ≪ 기체(g)
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function ReactionContainer({ box, isActive, isFadingIn }) {
+      const opacity = isActive ? (isFadingIn ? "0.5" : "1") : "0";
+      return (
+        <div className="absolute inset-0" style={{ opacity, transition: "opacity 2s" }}>
+          {box.g > 0 && Array.from({ length: box.g * 5 }).map((_, i) => (
+            <div key={`g-${i}`}
+                 className="absolute w-10 h-10 rounded-full bg-slate-400/80 shadow-sm flex items-center justify-center"
+                 style={{ left:`${Math.random()*70+10}%`, top:`${Math.random()*40+10}%`,
+                          animation:`float-gas 3s linear ${Math.random()*3}s infinite` }}>
+              <span className="text-[11px] font-black text-white leading-none">기체</span>
+            </div>
+          ))}
+          {(box.l > 0 || box.aq > 0) && (
+            <div className="absolute bottom-0 w-full h-[40%] border-t border-blue-400/50 flex flex-col items-center justify-center"
+                 style={{ backgroundColor: "rgba(147,197,253,0.3)" }}>
+              <div className="absolute top-0 w-full h-1 bg-blue-200/50" style={{ animation: "wave 2s ease-in-out infinite" }} />
+              <span className="text-xs font-black text-blue-800/50 z-0 tracking-widest bg-white/30 px-2 py-0.5 rounded">
+                {box.aq > 0 ? "수용액(aq)" : "액체(l)"}
+              </span>
+              {box.aq > 0 && Array.from({ length: box.aq * 5 }).map((_, i) => (
+                <div key={`aq-${i}`} className="absolute text-[11px] font-black text-blue-800 z-10"
+                     style={{ left:`${Math.random()*80+10}%`, top:`${Math.random()*60+10}%`,
+                              animation:`float-ion 3s ease-in-out ${Math.random()*2}s infinite alternate` }}>
+                  {i % 2 === 0 ? "⊕" : "⊖"}
+                </div>
+              ))}
+            </div>
+          )}
+          {box.s > 0 && (
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[50%] h-[30%] bg-slate-600 rounded-t-lg drop-shadow-md flex items-end justify-center pb-2"
+                 style={{ clipPath: "polygon(20% 100%, 80% 100%, 90% 40%, 60% 0%, 30% 10%, 10% 50%)" }}>
+              <span className="text-xs font-black text-white/80 bg-black/20 px-2 py-0.5 rounded">고체(s)</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ── 힌트 모달: 주위 ── */
+    function SurrHintModal({ rxn, onClose }) {
+      const [stage, setStage] = useState(0);
+      const isExo = rxn.surrAnim.isExo;
+      const containerRef = useRef(null);
+      const PARTICLE_COUNT = 15;
+      const particlesRef = useRef(
+        Array.from({ length: PARTICLE_COUNT }, () => ({
+          x: Math.random() * 90 + 5, y: Math.random() * 90 + 5,
+          vx: (Math.random() - 0.5) * 1.5, vy: (Math.random() - 0.5) * 1.5,
+        }))
+      );
+      useEffect(() => {
+        const t1 = setTimeout(() => setStage(1), 1500);
+        return () => clearTimeout(t1);
+      }, []);
+      useEffect(() => {
+        let raf;
+        let cur = 1.0;
+        const render = () => {
+          const target = stage === 1 ? (isExo ? 3.5 : 0.15) : 1.0;
+          cur += (target - cur) * 0.05;
+          particlesRef.current.forEach((p) => {
+            p.x += p.vx * cur; p.y += p.vy * cur;
+            if (p.x <= 0)  { p.x = 0;  p.vx *= -1; }
+            if (p.x >= 95) { p.x = 95; p.vx *= -1; }
+            if (p.y <= 0)  { p.y = 0;  p.vy *= -1; }
+            if (p.y >= 90) { p.y = 90; p.vy *= -1; }
+          });
+          if (containerRef.current) {
+            const ch = containerRef.current.children;
+            particlesRef.current.forEach((p, i) => {
+              if (ch[i + 1]) { ch[i+1].style.left = `${p.x}%`; ch[i+1].style.top = `${p.y}%`; }
+            });
+          }
+          raf = requestAnimationFrame(render);
+        };
+        render();
+        return () => cancelAnimationFrame(raf);
+      }, [stage, isExo]);
+      return (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+               style={{ animation: "fadeIn 0.2s ease forwards" }}>
+            <div className="bg-cyan-100 px-4 py-3 flex justify-between items-center border-b border-cyan-200">
+              <h3 className="font-black text-cyan-900 text-sm md:text-base">💨 주위 열 출입 시뮬레이션</h3>
+              <button onClick={onClose} className="text-cyan-700 hover:text-cyan-900 font-bold text-xl leading-none btn-press">&times;</button>
+            </div>
+            <div className="p-4 flex flex-col items-center">
+              <div className="w-full px-3 py-2 rounded-lg border shadow-sm flex flex-col items-center gap-1 mb-3 bg-white border-slate-200">
+                <span className="font-mono font-bold text-indigo-700 text-sm">{rxn.equation}</span>
+                <div className="text-xs font-bold text-slate-700 text-center">
+                  ΔH가 <span className={isExo ? "text-rose-600" : "text-sky-600"}>{isExo ? "음수(-)이므로 발열" : "양수(+)이므로 흡열"}</span> 반응
+                </div>
+              </div>
+              <div className="w-full h-44 bg-slate-100 rounded-xl relative border-2 border-slate-200 overflow-hidden flex items-center justify-center">
+                <div className="absolute top-2 left-3 text-sm font-black text-slate-400 z-20 bg-white/80 px-2 py-1 rounded shadow-sm">주위</div>
+                <div ref={containerRef} className="absolute inset-0 pointer-events-none">
+                  <div className="hidden" />
+                  {Array.from({ length: PARTICLE_COUNT }).map((_, i) => (
+                    <div key={i} className="absolute text-xl font-black"
+                         style={{ color: stage === 1 ? (isExo ? "#ef4444" : "rgba(56,189,248,0.4)") : "#94a3b8",
+                                  transition: "color 2s" }}>●</div>
+                  ))}
+                </div>
+                <div className={`w-24 h-24 rounded-full flex items-center justify-center relative z-10 border border-slate-300`}
+                     style={{ backgroundColor: stage === 1 ? "#cbd5e1" : "#e2e8f0",
+                              boxShadow: stage === 1 ? "0 0 20px rgba(0,0,0,0.2)" : "none",
+                              animation: stage === 1 ? "pulse-sys 1s infinite" : "none",
+                              transition: "background-color 2s" }}>
+                  <span className="text-sm font-black text-slate-600 z-20 bg-white/80 px-2 py-1 rounded shadow-sm">계</span>
+                  <div className="absolute inset-0 blur-md bg-white/50 rounded-full" />
+                </div>
+                {stage === 1 && (
+                  <div className="absolute inset-0 z-[15] pointer-events-none flex items-center justify-center">
+                    {isExo ? (
+                      <>
+                        <div className="absolute font-black text-rose-500 text-xl -mt-20 animate-bounce">⬆ 열 방출</div>
+                        <div className="absolute font-black text-rose-500 text-xl mt-20 animate-bounce rotate-180">⬆</div>
+                        <div className="absolute font-black text-rose-500 text-xl -ml-28 animate-bounce -rotate-90">⬆</div>
+                        <div className="absolute font-black text-rose-500 text-xl ml-28 animate-bounce rotate-90">⬆</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="absolute font-black text-sky-500 text-xl -mt-20 animate-bounce rotate-180">⬆ 열 흡수</div>
+                        <div className="absolute font-black text-sky-500 text-xl mt-20 animate-bounce">⬆</div>
+                        <div className="absolute font-black text-sky-500 text-xl -ml-28 animate-bounce rotate-90">⬆</div>
+                        <div className="absolute font-black text-sky-500 text-xl ml-28 animate-bounce -rotate-90">⬆</div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="h-10 mt-3 flex items-center justify-center w-full">
+                {stage === 1 && (
+                  <div className="text-sm font-black bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm text-center"
+                       style={{ animation: "fadeIn 0.3s ease" }}>
+                    {isExo
+                      ? <>열이 방출되어 주위 입자 운동이 <span className="text-rose-600">활발</span>해짐</>
+                      : <>열이 흡수되어 주위 입자 운동이 <span className="text-sky-600">둔</span>해짐</>
+                    }
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* 렌더링 */
+    ReactDOM.createRoot(document.getElementById("root")).render(<EntropySimulator />);
+  </script>
+</body>
+</html>
