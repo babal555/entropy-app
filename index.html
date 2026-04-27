@@ -384,10 +384,10 @@
                     👆 시소의 왼쪽(감소) · 오른쪽(증가)으로 블록을 드래그하세요
                   </p>
                   <div className="flex gap-2">
-                    {/* ⚗️ 계 */}
+                    {/* 계 */}
                     <div className="flex-1 rounded-xl border border-amber-100 bg-amber-50 px-2 py-1.5 flex flex-col gap-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[9px] md:text-xs font-black text-amber-900">⚗️ 계 엔트로피</span>
+                        <span className="text-[9px] md:text-xs font-black text-amber-900">계 엔트로피</span>
                         <button onClick={() => setActiveModal("system")}
                           className={`text-[8px] md:text-[9px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-full transition-colors btn-press ${hintPulse ? "hint-pulse-amber" : ""}`}>
                           💡 힌트
@@ -407,10 +407,10 @@
                       </div>
                     </div>
 
-                    {/* 🌡️ 주위 */}
+                    {/* 주위 */}
                     <div className="flex-1 rounded-xl border border-cyan-100 bg-cyan-50 px-2 py-1.5 flex flex-col gap-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[9px] md:text-xs font-black text-cyan-900">🌡️ 주위 엔트로피</span>
+                        <span className="text-[9px] md:text-xs font-black text-cyan-900">주위 엔트로피</span>
                         <button onClick={() => setActiveModal("surroundings")}
                           className={`text-[8px] md:text-[9px] font-bold text-cyan-700 bg-cyan-100 hover:bg-cyan-200 px-2 py-0.5 rounded-full transition-colors btn-press ${hintPulse ? "hint-pulse-cyan" : ""}`}>
                           💡 힌트
@@ -520,11 +520,11 @@
                     {/* 드롭존 */}
                     {phase === "predict" && (
                       <>
-                        <div className={`absolute bottom-full left-[8%] md:left-[10%] w-12 h-9 md:w-20 md:h-14 mb-0.5 border-2 md:border-[3px] border-dashed rounded-lg flex items-center justify-center text-[9px] md:text-xs font-black backdrop-blur-sm transition-all
+                        <div className={`absolute bottom-full left-[8%] md:left-[10%] w-12 h-9 md:w-20 md:h-14 mb-3 md:mb-4 border-2 md:border-[3px] border-dashed rounded-lg flex items-center justify-center text-[9px] md:text-xs font-black backdrop-blur-sm transition-all
                           ${hoverZone==="decrease"?"border-rose-400 bg-rose-100/60 text-rose-700 scale-105":"border-rose-300/40 bg-rose-50/40 text-rose-600/60"}`}>
                           놓기<br />(감소)
                         </div>
-                        <div className={`absolute bottom-full right-[8%] md:right-[10%] w-12 h-9 md:w-20 md:h-14 mb-0.5 border-2 md:border-[3px] border-dashed rounded-lg flex items-center justify-center text-[9px] md:text-xs font-black backdrop-blur-sm transition-all
+                        <div className={`absolute bottom-full right-[8%] md:right-[10%] w-12 h-9 md:w-20 md:h-14 mb-3 md:mb-4 border-2 md:border-[3px] border-dashed rounded-lg flex items-center justify-center text-[9px] md:text-xs font-black backdrop-blur-sm transition-all
                           ${hoverZone==="increase"?"border-emerald-400 bg-emerald-100/60 text-emerald-700 scale-105":"border-emerald-300/40 bg-emerald-50/40 text-emerald-600/60"}`}>
                           놓기<br />(증가)
                         </div>
@@ -819,7 +819,7 @@
               <div className="flex flex-col items-center gap-0.5 shrink-0">
                 <div className="text-[8px] font-bold text-slate-400">블록</div>
                 <div className={`w-11 h-11 rounded-xl bg-amber-100 border-2 border-amber-400 flex flex-col items-center justify-center font-black text-[9px] text-amber-800 shadow transition-all duration-500 ${ph >= 1 ? "opacity-25 scale-90" : "opacity-100 scale-100"}`}>
-                  <span>⚗️</span><span>계</span>
+                  <span></span><span>계</span>
                 </div>
               </div>
               <div className="text-slate-300 text-xl font-black">→</div>
@@ -836,7 +836,7 @@
               <div key={`fly-${animKey}`}
                    className="absolute w-11 h-11 rounded-xl bg-amber-100 border-2 border-amber-400 flex flex-col items-center justify-center font-black text-[9px] text-amber-800 shadow-xl tut-drag"
                    style={{ left: "14%", top: "calc(50% - 22px)" }}>
-                <span>⚗️</span><span>계</span>
+                <span></span><span>계</span>
               </div>
             )}
             <div className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
@@ -845,7 +845,7 @@
           </div>
           <div className="font-black text-base text-slate-900 mb-1">② 예측 &amp; 블록 배치</div>
           <p className="text-sm text-slate-600 leading-relaxed">
-            ⚗️계·🌡️주위 블록을 시소의 <strong>감소(왼쪽)</strong>/<strong>증가(오른쪽)</strong> 구역에 드래그하고 <strong>'정답 확인 및 시소 가동'</strong>을 누르세요.
+            계·주위 블록을 시소의 <strong>감소(왼쪽)</strong>/<strong>증가(오른쪽)</strong> 구역에 드래그하고 <strong>'정답 확인 및 시소 가동'</strong>을 누르세요.
           </p>
         </div>
       );
@@ -907,7 +907,7 @@
         <div className={`w-[48px] h-[48px] md:w-[58px] md:h-[58px] flex flex-col justify-between items-center overflow-hidden shadow-xl border-t-2 border-x-2 rounded-t-xl ${c.bg} ${c.border}`}>
           <div className={`w-full py-0.5 text-center border-b border-black/5 ${c.badge}`}>
             <span className={`text-[7px] md:text-[8px] font-black tracking-tighter ${c.dark}`}>
-              {isS ? "⚗️ 계" : "🌡️ 주위"}
+              {isS ? "계" : "주위"}
             </span>
           </div>
           <div className="flex-1 flex items-center justify-center w-full relative">
@@ -932,7 +932,7 @@
                       transition:"height 0.7s cubic-bezier(0.34,1.56,0.64,1), width 0.7s cubic-bezier(0.34,1.56,0.64,1)" }}>
           <div className={`w-full py-0.5 text-center border-b border-black/5 ${c.badge} shrink-0`}>
             <span className={`text-[6px] md:text-[7px] font-black tracking-tighter ${c.dark}`}>
-              {isS ? "⚗️ 계" : "🌡️ 주위"}
+              {isS ? "계" : "주위"}
             </span>
           </div>
           <div className="flex-1 flex flex-col items-center justify-center p-0.5 text-center w-full relative min-h-0">
@@ -971,7 +971,7 @@
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden" style={{ animation:"fadeIn .2s ease" }}>
             <div className="bg-amber-100 px-4 py-3 flex justify-between items-center border-b border-amber-200">
-              <h3 className="font-black text-amber-900 text-sm md:text-base">⚗️ 계의 미시적 상태 변화</h3>
+              <h3 className="font-black text-amber-900 text-sm md:text-base">계의 미시적 상태 변화</h3>
               <button onClick={onClose} className="text-amber-700 hover:text-amber-900 font-bold text-xl leading-none btn-press">&times;</button>
             </div>
             <div className="p-4 flex flex-col items-center">
@@ -1079,7 +1079,7 @@
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ animation:"fadeIn .2s ease" }}>
             <div className="bg-cyan-100 px-4 py-3 flex justify-between items-center border-b border-cyan-200">
-              <h3 className="font-black text-cyan-900 text-sm md:text-base">🌡️ 주위 열 출입 시뮬레이션</h3>
+              <h3 className="font-black text-cyan-900 text-sm md:text-base">주위 열 출입 시뮬레이션</h3>
               <button onClick={onClose} className="text-cyan-700 hover:text-cyan-900 font-bold text-xl leading-none btn-press">&times;</button>
             </div>
             <div className="p-4 flex flex-col items-center">
